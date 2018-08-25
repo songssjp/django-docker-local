@@ -1,0 +1,75 @@
+version: '3'
+
+volumes:
+  mysql_storage:
+    driver: 'local'
+  redis_storage:
+    driver: 'local'
+  jenkins_storage:
+    driver: 'local'
+
+services:
+  mysql:
+    image: mysql:5.6
+    volumes:
+      - mysql_storage:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+    networks:
+      app_net:
+        ipv4_address: 172.18.0.2
+  redis:
+    image: redis:4.0.11-alpine
+    volumes:
+      - redis_storage:/data
+    ports:
+      - "6379:6379"
+    networks:
+      app_net:
+        ipv4_address: 172.18.0.3
+  myapp:
+    build: ./django_sample
+    volumes:
+      - ${DOCKER_VM_FOLDER}/mysite:/home/docker/mysite
+    depends_on:
+      - mysql
+      - redis
+    ports:
+      - "8000:8000"
+    links:
+      - mysql:db
+      - redis:redis
+    working_dir: /home/docker/mysite
+    tty: true
+    networks:
+      app_net:
+        ipv4_address: 172.18.0.4
+  jenkins:
+    build: ./jenkins
+    volumes:
+      - ~/.ssh:/home/jenkins/.ssh:ro
+      - jenkins_storage:/var/jenkins_home
+      - ${DOCKER_VM_FOLDER}/mysite:/var/src/mysite:ro
+    ports:
+      - "8080:8080"
+    working_dir: /var/jenkins_home
+    networks:
+      app_net:
+        ipv4_address: 172.18.0.5
+  storage:
+    image: busybox
+    volumes:
+      - mysql_storage:/var/lib/mysql
+      - redis_storage:/data
+      - jenkins_storage:/var/jenkins_home
+      - ~/backup:/backup
+
+networks:
+  app_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.18.0.0/16
